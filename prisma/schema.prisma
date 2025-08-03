@@ -1,0 +1,134 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+/**
+ * migrating into an online database service:
+ * npx prisma migrate dev --name init
+ * npx prisma generate
+ * be carefull when using:
+ * npx prisma db pull
+ */
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/**
+ * each User can likes multiple posts, each Post can be liked by multiple users
+ * each User can saves multiple posts, each Post can be saved by multiple users
+ * each user can repost multiple posts, each post can be reposted by multiple users
+ */
+model User {
+  id          String  @id // generated when a user signed in
+  email       String  @unique @db.VarChar(255)
+  username    String  @unique @db.VarChar(255)
+  // the name displayed near to its avatar
+  displayName String? @db.VarChar(255)
+  // small description of the profile
+  bio         String? @db.VarChar(40)
+  location    String? @db.VarChar(20)
+  job         String? @db.VarChar(30)
+  website     String? @db.VarChar(20)
+  avatar      String?
+  cover       String?
+
+  Posts Post[]
+
+  likes Like[]
+  saves Save[]
+
+  // users that follow you
+  followerUsers  Follow[] @relation("FollowerRelation")
+  // users you follow
+  // who follows this user or which users this user follow
+  followingUsers Follow[] @relation("FollowingRelation")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+model Post {
+  id          String  @id @default(uuid())
+  title       String  @db.VarChar(255)
+  description String? @db.Text
+  image       String?
+  video       String?
+  isSensitive Boolean @default(false)
+
+  // post owner
+  userId String
+  User   User   @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /**
+   * relation name "RepostRelation" to the self-referencing
+   * self-referencing only works when the relationship is between entities of the same type.
+   * when this field is defined, a user has reposted that post
+   * reposting is like creating an old post, that's why we need self-referencing
+   * repost is also a post
+   * if we create a new model called repost, we've got some issues:
+   * 1) Conceptual Issue: Reposts ARE Posts
+   * 2) Timeline and Feed Complexity: Get original posts then Get reposts separately
+   * then merge and sort by timestamp - messy!
+   * 3) Comments and Interactions: Where do comments on reposts go?
+   * Do they go to the original post or the repost record?
+   * use relation names to distingwish relations with same model
+   */
+  repostId String?
+  rePost   Post?   @relation("RepostRelation", fields: [repostId], references: [id])
+  reposts  Post[]  @relation("RepostRelation") // lowercase plural for consistency
+
+  // for comments, each comment belong to one post
+  parentPostId String?
+  parentPost   Post?   @relation("CommentRelation", fields: [parentPostId], references: [id])
+  comments     Post[]  @relation("CommentRelation")
+
+  likes Like[]
+  saves Save[]
+
+  @@index([userId])
+}
+
+/**
+ * A like connects two different types of entities:
+ * Self-referencing: Same entity type (Post → Post, User → User)
+ * Junction tables: Different entity types (User ↔ Post)
+ * when a user repost or comment the result is s post => Self-referencing
+ * a user cannot like or save another user, same thing for post => junction table
+ */
+
+model Like {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  postId String
+  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+}
+
+model Save {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  postId String
+  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+}
+
+model Follow {
+  id          String @id @default(uuid())
+  followerId  String
+  followingId String // user you following
+  follwers    User   @relation("FollowerRelation", fields: [followerId], references: [id], onDelete: Cascade)
+  follwings   User   @relation("FollowingRelation", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@index([followerId, followingId])
+}
