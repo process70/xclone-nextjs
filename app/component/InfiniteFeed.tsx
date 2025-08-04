@@ -9,7 +9,7 @@ import Post from "./Post";
 const InfiniteFeed = ({ profileId }: { profileId?: string }) => {
   const fetchPosts = async (pageParam: number) => {
     const res = await fetch(
-      "http://localhost:3000/api/posts?cursor=" +
+      "https://xclone-nextjs.onrender.com/api/posts?cursor=" +
         pageParam +
         "&profileId=" +
         profileId
